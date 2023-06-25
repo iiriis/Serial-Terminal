@@ -1,4 +1,4 @@
-('C:\\Avijit\\Arduino\\Serial_Terminal_Basic\\Py_Serial_Terminal\\build\\Serial_Terminal\\PYZ-00.pyz',
+('C:\\Avijit\\Arduino\\Serial-Terminal\\Py_Serial_Terminal\\build\\Serial_Terminal\\PYZ-00.pyz',
  [('PIL', 'c:\\python\\lib\\site-packages\\PIL\\__init__.py', 'PYMODULE'),
   ('PIL.BlpImagePlugin',
    'c:\\python\\lib\\site-packages\\PIL\\BlpImagePlugin.py',

@@ -5,6 +5,7 @@ import threading
 from datetime import datetime
 from ttkthemes import ThemedTk
 from tkinter.scrolledtext import ScrolledText
+import time
 
 
 class SerialMonitorGUI:
@@ -16,6 +17,7 @@ class SerialMonitorGUI:
         self.is_connected = False
         self.style = ttk.Style()
         self.style.theme_use("plastik")
+        self.data_buf = 0
 
         # Set root window background color
         self.root.configure(background=self.style.lookup("TFrame", "background"))
@@ -115,7 +117,7 @@ class SerialMonitorGUI:
     def disconnect(self):
         if self.receive_thread:
             self.is_connected = False  # Set the flag to stop the receive thread
-            self.receive_thread.join()  # Wait for receive thread to exit
+            # self.receive_thread.join()  # Wait for receive thread to exit
             self.receive_thread = None
 
         if self.serial_port.is_open:
@@ -142,22 +144,30 @@ class SerialMonitorGUI:
     def read_data(self):
         while self.is_connected:
             try:
-                data = self.serial_port.readline().decode("utf-8")
-                if data:
-                    message = data
-                    if self.timestamp_var.get():
-                        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Keep only milliseconds
-                        message = f"[{timestamp}] {data}"
-                    self.scrollbox.insert(tk.END, message)
-                    if self.autoscroll_var.get():
-                        self.scrollbox.see(tk.END)
+                if self.serial_port.in_waiting:
+                    data = self.serial_port.read(256).decode("utf-8", errors="replace")
+                    if data:
+                        message = data
+                        self.data_buf += len(data)
+                        if self.timestamp_var.get():
+                            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Keep only milliseconds
+                            message = f"\n[{timestamp}] > {data}"
+                        self.scrollbox.insert(tk.END, message)
+
+                        # Limit data history
+                        if self.data_buf > 1000000:
+                            self.data_buf = 0
+                            self.scrollbox.delete(1.0, tk.END)
+
+                        if self.autoscroll_var.get():
+                            self.scrollbox.see(tk.END)
             except serial.SerialException:
                 self.scrollbox.insert(tk.END, "Serial connection closed.\n")
                 break
+            time.sleep(0.0001)  # Add a small delay of 0.1 milliseconds
 
     def run(self):
         self.root.mainloop()
-        
 
 
 if __name__ == "__main__":
