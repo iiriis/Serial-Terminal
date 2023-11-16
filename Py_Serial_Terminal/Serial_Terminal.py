@@ -6,6 +6,9 @@ from datetime import datetime
 from ttkthemes import ThemedTk
 from tkinter.scrolledtext import ScrolledText
 import time
+from tkinter import Menu
+from tkinter import messagebox
+import binascii
 
 
 class SerialMonitorGUI:
@@ -18,10 +21,23 @@ class SerialMonitorGUI:
         self.style = ttk.Style()
         self.style.theme_use("plastik")
         self.data_buf = 0
+        
 
         # Set root window background color
         self.root.configure(background=self.style.lookup("TFrame", "background"))
+        self.root.iconbitmap("icon.ico")
 
+        # Create the menubar
+        self.menubar = Menu(self.root)
+        self.root.config(menu=self.menubar)
+
+        # Create the "File" menu
+        self.file_menu = Menu(self.menubar, tearoff=0)
+        self.menubar.add_cascade(label="File", menu=self.file_menu)
+
+        # Add the "Exit" option to the "File" menu
+        self.file_menu.add_command(label="Exit", command=self.root.quit)
+        
         # Create GUI elements
         self.frame = ttk.Frame(self.root)
         self.frame.pack(padx=10, pady=10)
@@ -54,11 +70,16 @@ class SerialMonitorGUI:
         self.line_ending_combobox.configure(takefocus=True, state="readonly", style="TCombobox")
         self.line_ending_combobox.bind("<<ComboboxSelected>>", lambda event: self.line_ending_combobox.selection_clear())
 
-        self.send_label = ttk.Label(self.root, text="Send Data:")
-        self.send_label.pack(padx=10, pady=(0, 10), anchor=tk.W)
+        self.send_label = ttk.Label(self.frame, text="Mode :")
+        self.send_label.grid(row=4, column=0, pady=0, sticky=tk.W)
 
+
+        self.ascii_hex_radio_button_value=tk.IntVar(value=1)
+        self.ascii_hex_radio_button1 = ttk.Radiobutton(self.frame, text="ASCII", variable=self.ascii_hex_radio_button_value, command=self.ascii_hex_radio_button_changed, value=1).grid(row=4, column=1, padx=0, pady=5, sticky=tk.W)
+        self.ascii_hex_radio_button2 = ttk.Radiobutton(self.frame, text="HEX", variable=self.ascii_hex_radio_button_value, command=self.ascii_hex_radio_button_changed, value=2).grid(row=4, column=1, padx=50, pady=5, sticky=tk.W) 
+        
         self.send_entry = ttk.Entry(self.root)
-        self.send_entry.pack(padx=10, pady=(0, 10), fill="x")
+        self.send_entry.pack(padx=10, pady=(0, 0), fill="x")
         self.send_entry.configure(state="disabled")
         self.send_entry.bind("<Return>", self.send_data)  # Bind Enter key to send data
 
@@ -78,7 +99,15 @@ class SerialMonitorGUI:
         self.clear_button = ttk.Button(self.root, text="Clear", command=self.clear_textbox, style='ClearButton.TButton')
         self.clear_button.pack(padx=10, pady=(0, 10))
 
-        self.populate_serial_ports()
+        self.populate_serial_ports()    
+
+
+    def ascii_hex_radio_button_changed(self):
+        if(self.ascii_hex_radio_button_value.get() == 2):
+            self.line_ending_combobox.configure(state="disabled")
+        else:
+            self.line_ending_combobox.configure(state="enabled")    
+        
 
     def clear_textbox(self):
         self.scrollbox.delete("1.0", tk.END)
@@ -127,13 +156,37 @@ class SerialMonitorGUI:
         self.send_entry.configure(state="disabled")  # Disable send entry
 
     def send_data(self, event=None):
-        data = self.send_entry.get()
+        data = self.send_entry.get().strip()
         line_ending = self.get_selected_line_ending()
 
+        
         if data:
             if self.is_connected:
-                data += line_ending
-                self.serial_port.write(data.encode("utf-8"))
+                if(self.ascii_hex_radio_button_value.get() == 1):
+                    data += line_ending
+                    self.serial_port.write(data.encode("utf-8"))
+                    self.scrollbox.insert(tk.END, '\nSent : '+data+'\n', 'sent')
+                    self.scrollbox.tag_config('sent', foreground='green')
+                else:
+                    try:
+                        hex_list = data.split(" ")
+                        bytes_list = []
+
+                        for i in range(len(hex_list)):
+                            hex_val = hex_list[i]
+                            if len(hex_val) == 1:
+                                hex_val = "0" + hex_val
+                            bytes_list.append(int(hex_val, 16))
+
+                        bytes_array = bytes(bytes_list)
+                        self.serial_port.write(bytes_array)
+
+                        self.scrollbox.insert(tk.END, '\nSent : '+data, 'sent')
+                        self.scrollbox.tag_config('sent', foreground='green')
+
+                    except ValueError:
+                        messagebox.showerror('Value Error', 'Improper Hex String or Value out of Range (0-255)')
+
             self.send_entry.delete(0, tk.END)
 
     def get_selected_line_ending(self):
@@ -144,23 +197,53 @@ class SerialMonitorGUI:
     def read_data(self):
         while self.is_connected:
             try:
-                if self.serial_port.in_waiting:
-                    data = self.serial_port.read(256).decode("utf-8", errors="replace")
-                    if data:
-                        message = data
-                        self.data_buf += len(data)
-                        if self.timestamp_var.get():
-                            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Keep only milliseconds
-                            message = f"\n[{timestamp}] > {data}"
-                        self.scrollbox.insert(tk.END, message)
+                if(self.ascii_hex_radio_button_value.get() == 1):
+                    data = ""
+                    message = ""
+                    if self.serial_port.in_waiting:
+                        data = self.serial_port.read(1024).decode("utf-8", errors="replace")
+                        if data:
+                            message = data
+                            self.data_buf += len(data)
+                            if self.timestamp_var.get():
+                                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Keep only milliseconds
+                                message = f"\n[{timestamp}] > {data}"
+                            self.scrollbox.insert(tk.END, message)
 
-                        # Limit data history
-                        if self.data_buf > 1000000:
-                            self.data_buf = 0
-                            self.scrollbox.delete(1.0, tk.END)
+                            # Limit data history
+                            if self.data_buf > 1000000:
+                                self.data_buf = 0
+                                self.scrollbox.delete(1.0, tk.END)
 
-                        if self.autoscroll_var.get():
-                            self.scrollbox.see(tk.END)
+                            if self.autoscroll_var.get():
+                                self.scrollbox.see(tk.END)
+                            
+                            # print('still in ASCII')
+                else:
+                    data = ""
+                    message = ""
+                    if self.serial_port.in_waiting:
+                        data = self.serial_port.read(1024)
+                        if data:
+                            ## Convert data to hexstring with space between each pair of digits
+                            message = " ".join([f"0x{byte:02X}" for byte in data])
+                            # message = hexstring
+                            self.data_buf += len(message)
+                            if self.timestamp_var.get():
+                                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Keep only milliseconds
+                                message = f"\n[{timestamp}] > {message}"
+
+                            self.scrollbox.insert(tk.END, message)
+
+                            # Limit data history
+                            if self.data_buf > 1000000:
+                                self.data_buf = 0
+                                self.scrollbox.delete(1.0, tk.END)
+
+                            if self.autoscroll_var.get():
+                                self.scrollbox.see(tk.END)
+
+                    
             except serial.SerialException:
                 self.scrollbox.insert(tk.END, "Serial connection closed.\n")
                 break
