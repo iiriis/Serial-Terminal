@@ -73,7 +73,6 @@ class SerialMonitorGUI:
         self.send_label = ttk.Label(self.frame, text="Mode :")
         self.send_label.grid(row=4, column=0, pady=0, sticky=tk.W)
 
-
         self.ascii_hex_radio_button_value=tk.IntVar(value=1)
         self.ascii_hex_radio_button1 = ttk.Radiobutton(self.frame, text="ASCII", variable=self.ascii_hex_radio_button_value, command=self.ascii_hex_radio_button_changed, value=1).grid(row=4, column=1, padx=0, pady=5, sticky=tk.W)
         self.ascii_hex_radio_button2 = ttk.Radiobutton(self.frame, text="HEX", variable=self.ascii_hex_radio_button_value, command=self.ascii_hex_radio_button_changed, value=2).grid(row=4, column=1, padx=50, pady=5, sticky=tk.W) 
@@ -95,9 +94,24 @@ class SerialMonitorGUI:
         self.scrollbox.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
         self.scrollbox.configure(font=("Courier", 12), background='#ffffeb')  # Set the desired font family and size
 
+        self.parity_label = ttk.Label(self.frame, text="Parity :")
+        self.parity_label.grid(row=4, column=2, padx=5, sticky=tk.W)
+
+        self.parity_combobox = ttk.Combobox(self.frame)
+        self.parity_combobox["values"] = ["None", "Odd", "Even"]
+        self.parity_combobox.current(0)
+        self.parity_combobox.configure(takefocus=True, state="readonly", style="TCombobox")
+        self.parity_combobox.grid(row=4, column=3, padx=0, sticky=tk.W)
+        self.parity_combobox.bind("<<ComboboxSelected>>", lambda event: self.parity_combobox.selection_clear())
+
+
         self.style.configure('ClearButton.TButton')
         self.clear_button = ttk.Button(self.root, text="Clear", command=self.clear_textbox, style='ClearButton.TButton')
-        self.clear_button.pack(padx=10, pady=(0, 10))
+        self.clear_button.pack(padx=100, pady=(0, 10), anchor="center")
+
+        
+
+
 
         self.populate_serial_ports()    
 
@@ -129,8 +143,15 @@ class SerialMonitorGUI:
         port = self.port_combobox.get()
         baud_rate = int(self.baud_entry.get())
 
+        parity_bit=serial.PARITY_NONE
+
+        if(self.parity_combobox.get() == 'Odd'):
+            parity_bit=serial.PARITY_ODD
+        elif(self.parity_combobox.get() == 'Even'):
+            parity_bit=serial.PARITY_EVEN
+
         try:
-            self.serial_port = serial.Serial(port, baud_rate, timeout=0)  # Set timeout to 0 for non-blocking read
+            self.serial_port = serial.Serial(port, baudrate=baud_rate, parity=parity_bit, timeout=0)  # Set timeout to 0 for non-blocking read
             self.is_connected = True
             self.connect_button.configure(text="Disconnect")
 
@@ -201,9 +222,9 @@ class SerialMonitorGUI:
                     data = ""
                     message = ""
                     if self.serial_port.in_waiting:
-                        data = self.serial_port.read(1024).decode("utf-8", errors="replace")
+                        data = self.serial_port.read(256).decode("utf-8", errors="replace")
                         if data:
-                            message = data
+                            message = f"{data}"
                             self.data_buf += len(data)
                             if self.timestamp_var.get():
                                 timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Keep only milliseconds
@@ -223,11 +244,11 @@ class SerialMonitorGUI:
                     data = ""
                     message = ""
                     if self.serial_port.in_waiting:
-                        data = self.serial_port.read(1024)
+                        data = self.serial_port.read(256)
                         if data:
                             ## Convert data to hexstring with space between each pair of digits
-                            message = " ".join([f"0x{byte:02X}" for byte in data])
-                            # message = hexstring
+                            message = " ".join([f"{byte:02X}" for byte in data])
+                            message = f"\n{message}"
                             self.data_buf += len(message)
                             if self.timestamp_var.get():
                                 timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # Keep only milliseconds
